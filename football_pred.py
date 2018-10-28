@@ -1,38 +1,113 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.metrics import classification_report
-from functions import get_dummies
+from sklearn.metrics import accuracy_score
+from sklearn import linear_model
+from functions import *
+from sklearn.naive_bayes import GaussianNB
 
-row_data = pd.read_csv("C:/Users/vyakovenko/Documents/projects/xG/all/train.csv")
-row_data = row_data.dropna()
-features_ready = ['B365H', 'B365D', 'B365A','BWH', 'BWD', 'BWA', 'IWH', 'IWD', 'IWA', 'LBH', 'LBD',
+# Read original training dataset:
+file_path_mac = '/Users/vladyslavyakovenko/PycharmProjects/seria-A-prediction/data/train.csv'
+file_path_win = 'C:/Users/vyakovenko/Documents/projects/xG/all/train.csv'
+row_data = pd.read_csv(file_path_mac)
+
+# Handling missing values:
+data_without_na = row_data.dropna()
+
+attrs_odd = ['B365H', 'B365D', 'B365A','BWH', 'BWD', 'BWA', 'IWH', 'IWD', 'IWA', 'LBH', 'LBD',
                   'LBA', 'WHH', 'WHD', 'WHA', 'VCH', 'VCD', 'VCA']
-features_to_encode = ["HomeTeam", "AwayTeam"]
+attrs_team = ["HomeTeam", "AwayTeam"]
 target = ["FTR"]
 
-row_data = get_dummies(row_data, [features_to_encode[0]], prefix_name='ohe_ht')
-row_data = get_dummies(row_data, [features_to_encode[1]], prefix_name='ohe_at')
+row_data['period'] = row_data.apply(lambda row: str(row['Date'])[:7], axis=1)
 
-features_dummy = [col for col in row_data.columns if col.startswith('ohe')]
-#features_to_use = features_ready + features_dummy
-features_to_use = features_ready
+data_without_na, attrs_ohe_ht = get_dummies(data_without_na, [attrs_team[0]], keep_original=True, prefix_name='ohe_ht')
+data_without_na, attrs_ohe_at = get_dummies(data_without_na, [attrs_team[1]], keep_original=True, prefix_name='ohe_at')
 
-X_train, X_test, y_train, y_test = train_test_split(row_data[features_to_use], row_data[target],
-                                                    test_size=0.3, random_state=1)
+#data_without_na = encode_label(data_without_na, target)
 
-clf = RandomForestClassifier(n_estimators=100, max_depth=10)
-clf.fit(X_train, y_train.values.ravel())
+X_train, X_test, y_train, y_test = split_set(data_without_na, target, test_size=.33)
 
-y_pred = clf.predict(X_test)
 
-print(classification_report(y_test.values.ravel(), y_pred))
+X_train, attrs_points = extract_total_points(X_train, X_train)
+X_test, attrs_points = extract_total_points(X_train, X_test)
 
-y_pred_train = clf.predict(X_train)
+#X_train = scale_features_min_max(X_train, attrs_odd)
+#X_test = scale_features_min_max(X_test, attrs_odd)
+
+X_train = scale_features_max_abs(X_train, attrs_odd)
+X_test = scale_features_max_abs(X_test, attrs_odd)
+
+X_train, attrs_date = extract_date_features(X_train, 'Date')
+X_test, attrs_date = extract_date_features(X_test, 'Date')
+
+X_train = scale_features_min_max(X_train, attrs_date)
+X_test = scale_features_min_max(X_test, attrs_date)
+
+X_train = scale_features_min_max(X_train, attrs_points)
+X_test = scale_features_min_max(X_test, attrs_points)
+
+
+#attrs_to_use = attrs_odd + attrs_points + attrs_date
+attrs_to_use = attrs_points + attrs_date
+attrs_to_use = attrs_points
+
+
+clf = RandomForestClassifier(n_estimators=500, max_depth=15)
+
+clf.fit(X_train[attrs_to_use], y_train.values.ravel())
+
+y_pred_train = clf.predict(X_train[attrs_to_use])
+y_pred_test = clf.predict(X_test[attrs_to_use])
+
+accuracy_train = accuracy_score(y_train.values.ravel(), y_pred_train)
+accuracy_test = accuracy_score(y_test.values.ravel(), y_pred_test)
+print('accuracy TRAIN: ', accuracy_train, '\n',
+      'accuracy TEST: ', accuracy_test)
+
+gbc = GradientBoostingClassifier(n_estimators=100, max_depth=10)
+
+gbc.fit(X_train[attrs_to_use], y_train.values.ravel())
+
+y_pred_train = clf.predict(X_train[attrs_to_use])
+y_pred_test = clf.predict(X_test[attrs_to_use])
+
+accuracy_train = accuracy_score(y_train.values.ravel(), y_pred_train)
+accuracy_test = accuracy_score(y_test.values.ravel(), y_pred_test)
+print('accuracy TRAIN: ', accuracy_train, '\n',
+      'accuracy TEST: ', accuracy_test)
+
+
+lgc = linear_model.LogisticRegression(random_state=0, solver='lbfgs',multi_class='multinomial')
+
+lgc.fit(X_train[attrs_to_use], y_train.values.ravel())
+
+y_pred_train = clf.predict(X_train[attrs_to_use])
+y_pred_test = clf.predict(X_test[attrs_to_use])
+
+accuracy_train = accuracy_score(y_train.values.ravel(), y_pred_train)
+accuracy_test = accuracy_score(y_test.values.ravel(), y_pred_test)
+print('accuracy TRAIN: ', accuracy_train, '\n',
+      'accuracy TEST: ', accuracy_test)
+
+
+nbc = GaussianNB()
+
+nbc.fit(X_train[attrs_to_use], y_train.values.ravel())
+
+y_pred_train = clf.predict(X_train[attrs_to_use])
+y_pred_test = clf.predict(X_test[attrs_to_use])
+
+accuracy_train = accuracy_score(y_train.values.ravel(), y_pred_train)
+accuracy_test = accuracy_score(y_test.values.ravel(), y_pred_test)
+print('accuracy TRAIN: ', accuracy_train, '\n',
+      'accuracy TEST: ', accuracy_test)
+
+np.unique(y_pred_train, return_counts=True)
+np.unique(y_pred_test, return_counts=True)
+np.unique(y_train.values.ravel(), return_counts=True)
+np.unique(y_test.values.ravel(), return_counts=True)
+
+print(classification_report(y_test.values.ravel(), y_pred_test))
 print(classification_report(y_train.values.ravel(), y_pred_train))
-
-
-X_train['HomeTeam'] = pd.Categorical(X_train['HomeTeam'])
-home_team_dummies = pd.get_dummies(X_train['HomeTeam'], prefix='ht')
-
-X_train = pd.concat([X_train, home_team_dummies], axis=1)
