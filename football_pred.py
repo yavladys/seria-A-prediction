@@ -6,6 +6,8 @@ from sklearn.metrics import accuracy_score
 from sklearn import linear_model
 from functions import *
 from sklearn.naive_bayes import GaussianNB
+from sklearn.feature_selection import f_regression, mutual_info_classif, f_classif, chi2
+
 
 # Read original training dataset:
 file_path_mac = '/Users/vladyslavyakovenko/PycharmProjects/seria-A-prediction/data/train.csv'
@@ -49,17 +51,40 @@ X_train = scale_features_min_max(X_train, attrs_points)
 X_test = scale_features_min_max(X_test, attrs_points)
 
 
-#attrs_to_use = attrs_odd + attrs_points + attrs_date
-attrs_to_use = attrs_points + attrs_date
-attrs_to_use = attrs_points
+#attrs_to_use = attrs_odd + attrs_points + attrs_date + attrs_ohe_ht + attrs_ohe_at
+attrs_to_use = attrs_odd
+#attrs_to_use = attrs_points
 
 
-clf = RandomForestClassifier(n_estimators=500, max_depth=15)
+#Feature selection:
+feature_scores = mutual_info_classif(X_train[attrs_to_use], y_train.values.ravel())
+
+for score, fname in sorted(zip(feature_scores, attrs_to_use), reverse=True)[:20]:
+    print(fname, score)
+
+feature_scores_anova = f_classif(X_train[attrs_to_use], y_train.values.ravel())[0]
+
+for score, fname in sorted(zip(feature_scores_anova, attrs_to_use), reverse=True)[:20]:
+    print(fname, score)
+
+feature_scores_chi2 = chi2(X_train[attrs_to_use], y_train.values.ravel())[0]
+
+attr_best = []
+for score, fname in sorted(zip(feature_scores_chi2, attrs_to_use), reverse=True)[:18]:
+    attr_best.append(fname)
+
+#attrs_to_use=attr_best
+
+clf = RandomForestClassifier(n_estimators=150, max_depth=7)
 
 clf.fit(X_train[attrs_to_use], y_train.values.ravel())
 
 y_pred_train = clf.predict(X_train[attrs_to_use])
 y_pred_test = clf.predict(X_test[attrs_to_use])
+
+dataset = pd.concat([X_train[attrs_to_use], pd.DataFrame(y_pred_train), y_train], axis=1)
+
+
 
 accuracy_train = accuracy_score(y_train.values.ravel(), y_pred_train)
 accuracy_test = accuracy_score(y_test.values.ravel(), y_pred_test)
