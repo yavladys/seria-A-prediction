@@ -2,6 +2,7 @@ import pandas as pd
 import inspect
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+from variables import *
 
 
 def get_dummies(df, attrs, keep_original=False, prefix_name='ohe'):
@@ -69,3 +70,26 @@ def extract_total_points(train_df, df, outcome='FTR', away_team='AwayTeam', home
                             attrs[1] + '_x': new_attrs[2],
                             attrs[1] + '_y': new_attrs[3]})
     return df, new_attrs
+
+
+def produce_points(df):
+    new_attrs = ['points_ht', 'points_at']
+    df.loc[:, new_attrs[0]] = df.apply(
+        lambda row: 3 if row[OriginalAttributes.outcome] == 'H' else 1 if row[OriginalAttributes.outcome] == 'D' else 0,
+        axis=1)
+    df.loc[:, new_attrs[1]] = df.apply(
+        lambda row: 3 if row[OriginalAttributes.outcome] == 'A' else 1 if row[OriginalAttributes.outcome] == 'D' else 0,
+        axis=1)
+    return df, new_attrs
+
+def produce_points_prior_to_match(df):
+    for index, row in df.iterrows():
+        df_b = df[df[OriginalAttributes.date < df[OriginalAttributes.date][index]]]
+        points_ht = df_b.groupBy(OriginalAttributes.home_team)['points_ht'].agg(sum)
+        points_ht[row[OriginalAttributes.home_team]]
+
+def scale_odds(df, attrs):
+    for attr in attrs:
+        df[attr] = 1 / df[attr]
+    return df
+
