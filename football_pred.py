@@ -53,7 +53,7 @@ X_test = scale_features_min_max(X_test, attrs_points)
 
 #attrs_to_use = attrs_odd + attrs_points + attrs_date + attrs_ohe_ht + attrs_ohe_at
 attrs_to_use = attrs_odd
-#attrs_to_use = attrs_points
+attrs_to_use = attrs_points
 
 
 #Feature selection:
@@ -82,7 +82,7 @@ clf.fit(X_train[attrs_to_use], y_train.values.ravel())
 y_pred_train = clf.predict(X_train[attrs_to_use])
 y_pred_test = clf.predict(X_test[attrs_to_use])
 
-dataset = pd.concat([X_train[attrs_to_use], pd.DataFrame(y_pred_train), y_train], axis=1)
+dataset = pd.concat([X_train[attrs_to_use], pd.DataFrame(y_pred_train)], axis=1)
 
 
 

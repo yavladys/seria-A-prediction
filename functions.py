@@ -1,5 +1,5 @@
 import pandas as pd
-import inspect
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from variables import *
@@ -82,11 +82,91 @@ def produce_points(df):
         axis=1)
     return df, new_attrs
 
-def produce_points_prior_to_match(df):
-    for index, row in df.iterrows():
-        df_b = df[df[OriginalAttributes.date < df[OriginalAttributes.date][index]]]
-        points_ht = df_b.groupBy(OriginalAttributes.home_team)['points_ht'].agg(sum)
-        points_ht[row[OriginalAttributes.home_team]]
+
+def produce_points_prior_to_match(df_trn, df_tst):
+    new_attrs = ['ttl_hm_pts_hm_tm_bfr_mch',
+                 'ttl_hm_pts_aw_tm_bfr_mch',
+                 'ttl_aw_pts_hm_tm_bfr_mch',
+                 'ttl_aw_pts_aw_tm_bfr_mch']
+    orig_attrs = OriginalAttributes()
+    points_pr = np.empty((0, 4), float)
+    df_trn = df_trn.reset_index(drop=True)
+    df_tst = df_tst.reset_index(drop=True)
+    for index, row in df_tst.iterrows():
+        # Get all results prior to match date:
+        df_pr = df_trn[df_trn[orig_attrs.date] < df_tst[orig_attrs.date][index]]
+        # Sum all home points of home team
+        hm_pts_hm_team = df_pr.loc[df_pr[orig_attrs.home_team] == row[orig_attrs.home_team], 'points_ht'].sum()
+        hm_pts_aw_team = df_pr.loc[df_pr[orig_attrs.home_team] == row[orig_attrs.away_team], 'points_ht'].sum()
+        aw_pts_hm_team = df_pr.loc[df_pr[orig_attrs.away_team] == row[orig_attrs.home_team], 'points_at'].sum()
+        aw_pts_aw_team = df_pr.loc[df_pr[orig_attrs.away_team] == row[orig_attrs.away_team], 'points_at'].sum()
+        # Collect all points of both team (prior to match)
+        points_pr = np.vstack([
+            points_pr,
+            np.array([
+                hm_pts_hm_team,
+                hm_pts_aw_team,
+                aw_pts_hm_team,
+                aw_pts_aw_team
+            ]),
+        ])
+
+    df_tst = pd.concat([df_tst, pd.DataFrame(points_pr, columns=new_attrs)], axis=1)
+    return df_tst, new_attrs
+
+
+def produce_points_prior_to_match_with_all_opponents(df_trn, df_tst, teams):
+    # Create df of zeros to fulfill with corresponding points
+    all_pts_df_shape = (df_tst.shape[0], teams.size * 4)
+    # For types of features
+    attrs_pts_ht_hm_vs = ['ht_hm_vs_' + team for team in teams]
+    attrs_pts_ht_aw_vs = ['ht_aw_vs_' + team for team in teams]
+    attrs_pts_at_hm_vs = ['at_hm_vs_' + team for team in teams]
+    attrs_pts_at_aw_vs = ['at_aw_vs_' + team for team in teams]
+    all_pts_df_columns = attrs_pts_ht_hm_vs + attrs_pts_ht_aw_vs + attrs_pts_at_hm_vs + attrs_pts_at_aw_vs
+    all_pts_df = pd.DataFrame(np.zeros(all_pts_df_shape), columns=all_pts_df_columns)
+
+    # Get original attribute names
+    df_trn = df_trn.reset_index(drop=True)
+    df_tst = df_tst.reset_index(drop=True)
+    orig_attrs = OriginalAttributes()
+    for index, row in df_tst.iterrows():
+        # Get all available match results prior to current match
+        df_pr = df_trn[df_trn[orig_attrs.date] < df_tst[orig_attrs.date][index]]
+        # For simplicity store iterable rows to separate variables
+        iter_ht = row[orig_attrs.home_team]
+        iter_at = row[orig_attrs.away_team]
+        # Collect home and away points of home and away team
+        pts_ht_hm_vs_all = df_pr.loc[df_pr[orig_attrs.home_team] == iter_ht].groupby(
+            orig_attrs.away_team)['points_ht'].agg(sum)
+        pts_ht_aw_vs_all = df_pr.loc[df_pr[orig_attrs.away_team] == iter_ht].groupby(
+            orig_attrs.home_team)['points_at'].agg(sum)
+        pts_at_hm_vs_all = df_pr.loc[df_pr[orig_attrs.home_team] == iter_at].groupby(
+            orig_attrs.away_team)['points_ht'].agg(sum)
+        pts_at_aw_vs_all = df_pr.loc[df_pr[orig_attrs.away_team] == iter_at].groupby(
+            orig_attrs.home_team)['points_at'].agg(sum)
+
+        # Fulfill created dataframe with corresponding values
+        for opponent, pts in pts_ht_hm_vs_all.iteritems():
+            pts_vs_opponent = pts_ht_hm_vs_all[opponent]
+            all_pts_df.loc[index]['ht_hm_vs_' + opponent] = pts_vs_opponent
+
+        for opponent, pts in pts_ht_aw_vs_all.iteritems():
+            pts_vs_opponent = pts_ht_aw_vs_all[opponent]
+            all_pts_df.loc[index]['ht_aw_vs_' + opponent] = pts_vs_opponent
+
+        for opponent, pts in pts_at_hm_vs_all.iteritems():
+            pts_vs_opponent = pts_at_hm_vs_all[opponent]
+            all_pts_df.loc[index]['at_hm_vs_' + opponent] = pts_vs_opponent
+
+        for opponent, pts in pts_at_aw_vs_all.iteritems():
+            pts_vs_opponent = pts_at_aw_vs_all[opponent]
+            all_pts_df.loc[index]['at_aw_vs_' + opponent] = pts_vs_opponent
+
+    # Attach dataframe to original
+    df_tst = pd.concat([df_tst, all_pts_df], axis=1)
+    return df_tst, (attrs_pts_ht_hm_vs, attrs_pts_ht_aw_vs, attrs_pts_at_hm_vs, attrs_pts_at_aw_vs)
+
 
 def scale_odds(df, attrs):
     for attr in attrs:
